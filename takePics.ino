@@ -4,8 +4,15 @@
 #include <by_config.h>
 #include <esp_heap_caps.h>
 #include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include "FS.h"
+#include "SPIFFS.h"
+#define CAMERA_MODEL_AI_THINKER
 
 WiFiClientSecure httpsClient;
+// ========= Socket TCP   ===============================
+WiFiServer server(1234);
+WiFiClient tcpClient;
 
 // ======  Boton  =============
 const int botonPin = 13; 
@@ -15,13 +22,17 @@ unsigned long ultimoTiempoDebounce = 0;
 unsigned long delayDebounce = 200;
 
 
-// ========= Socket TCP   ===============================
-WiFiServer server(1234);
-WiFiClient tcpClient;
+// ========= Telegram Bot   ===============================
+UniversalTelegramBot bot(TELEGRAM_BOT_TOKEN, httpsClient);
+unsigned long lastCheckTime = 0;
+const int checkInterval = 2000; // cada 2 segundos
+
+
 
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
+  SPIFFS.begin(true);
 
   // ========== Botones   ===================
   pinMode(botonPin, INPUT_PULLUP);
@@ -61,7 +72,8 @@ void setup() {
 
     if (httpsClient.connect("api.telegram.org", 443)) {
       // Enviar mensaje de inicio a Telegram
-      enviarTelegram("🚀 ESP32-CAM Reiniciado y Listo! IP: " + WiFi.localIP().toString());
+      // enviarTelegram("🚀 ESP32-CAM Reiniciado y Listo! IP: " + WiFi.localIP().toString());
+      bot.sendMessage(TELEGRAM_CHAT_ID, "🤖 ESP32-CAM conectado y listo!");
       Serial.println("✅ Notificación enviada a Telegram!");
     } else {
       Serial.println("❌ No se pudo conectar a Telegram.");
@@ -112,6 +124,17 @@ void loop() {
     }
   }
 
+  // ======= monitor Telegram bot  ============================
+    if (millis() - lastCheckTime > checkInterval) {
+    int newMessages = bot.getUpdates(bot.last_message_received + 1);
+    while (newMessages) {
+      handleNewMessages(newMessages);
+      newMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastCheckTime = millis();
+  }
+
+
   // ======  Botones  ==============
   //  Leer estado del botón con debounce50
   int lecturaBoton = digitalRead(botonPin);
@@ -137,11 +160,66 @@ void loop() {
 
 // ================== FUNCIONES DE TELEGRAM ==================
 
+
+void handleNewMessages(int numNewMessages) {
+  Serial.printf("📩 Mensajes nuevos: %d\n", numNewMessages);
+  for (int i = 0; i < numNewMessages; i++) {
+    String chat_id = bot.messages[i].chat_id;
+    String text = bot.messages[i].text;
+
+    Serial.printf("Mensaje recibido: %s\n", text.c_str());
+
+    if (text == "/start") {
+      bot.sendMessage(chat_id, "📸 Enviar /foto para tomar una imagen", "");
+    } 
+    else if (text == "/foto") {
+      bot.sendMessage(chat_id, "📷 Tomando foto, espera...");
+
+      camera_fb_t *fb = esp_camera_fb_get();
+      if (!fb) {
+        bot.sendMessage(chat_id, "❌ Error al tomar la foto");
+        return;
+      }
+      
+      takeAndSendPhoto();
+      
+    } 
+    else {
+      bot.sendMessage(chat_id, "Comando no reconocido 😅\nUsa /foto");
+    }
+  }
+}
+
 void enviarTelegram(String mensaje) {
    String url = String("/bot") + TELEGRAM_BOT_TOKEN + "/sendMessage?chat_id=" + TELEGRAM_CHAT_ID + "&text=" + mensaje;
    Serial.println("enviarTelegram url: " + url);
    httpsClient.print(String("GET ") + url + " HTTP/1.1\r\nHost: api.telegram.org\r\nConnection: close\r\n\r\n");
   
+}
+
+void takeAndSendPhoto() {
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("❌ Error al capturar imagen");
+    return;
+  }
+
+  File file = SPIFFS.open("/foto.jpg", FILE_WRITE);
+  if (!file) {
+    Serial.println("❌ Error al abrir archivo para guardar imagen");
+    esp_camera_fb_return(fb);
+    return;
+  }
+
+  file.write(fb->buf, fb->len);
+  file.close();
+  esp_camera_fb_return(fb);
+
+  Serial.println("📸 Foto guardada, enviando a Telegram...");
+  bot.sendPhoto(TELEGRAM_CHAT_ID, "/foto.jpg", "Foto desde ESP32-CAM");
+
+  SPIFFS.remove("/foto.jpg");
+  Serial.println("✅ Foto enviada y eliminada");
 }
 
 // ================== FUNCIONES DE TCP  ==================
@@ -459,7 +537,7 @@ bool startCamera() {
     // Calidad de imagen
   config.frame_size = FRAMESIZE_SVGA; // 800x600
   config.jpeg_quality = 10; // 0-63 (menor = mejor calidad)
-  config.fb_count = 1;
+  config.fb_count = 2;
 
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
