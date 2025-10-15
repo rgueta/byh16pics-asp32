@@ -8,7 +8,6 @@
 WiFiClientSecure httpsClient;
 
 // ======  Boton  =============
-// #define BUTTON_PIN 16
 const int botonPin = 13; 
 bool botonPresionado = false;
 bool ultimoEstadoBoton = HIGH;
@@ -26,8 +25,6 @@ void setup() {
 
   // ========== Botones   ===================
   pinMode(botonPin, INPUT_PULLUP);
-  // attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonIsr, FALLING);
-
 
    // Configurar cliente seguro para Telegram
   httpsClient.setInsecure(); // Evita problemas con certificados HTTPS(SSL)
@@ -115,7 +112,7 @@ void loop() {
     }
   }
 
-    // ======  Botones  ==============
+  // ======  Botones  ==============
   //  Leer estado del botón con debounce50
   int lecturaBoton = digitalRead(botonPin);
   
@@ -126,7 +123,7 @@ void loop() {
   if ((millis() - ultimoTiempoDebounce) > delayDebounce) {
     if (lecturaBoton == LOW && !botonPresionado) {
       botonPresionado = true;
-      // tomarYEnviarFoto();
+      tomarYEnviarFoto();
       Serial.println("Boton presionado!");
     } else if (lecturaBoton == HIGH) {
       botonPresionado = false;
@@ -136,8 +133,6 @@ void loop() {
   ultimoEstadoBoton = lecturaBoton;
   delay(10);
 }
-
-
 
 
 // ================== FUNCIONES DE TELEGRAM ==================
