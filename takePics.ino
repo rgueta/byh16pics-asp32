@@ -7,6 +7,15 @@
 
 WiFiClientSecure httpsClient;
 
+// ======  Boton  =============
+// #define BUTTON_PIN 16
+const int botonPin = 13; 
+bool botonPresionado = false;
+bool ultimoEstadoBoton = HIGH;
+unsigned long ultimoTiempoDebounce = 0;
+unsigned long delayDebounce = 200;
+
+
 // ========= Socket TCP   ===============================
 WiFiServer server(1234);
 WiFiClient tcpClient;
@@ -14,6 +23,11 @@ WiFiClient tcpClient;
 void setup() {
   Serial.begin(115200);
   Serial.setDebugOutput(true);
+
+  // ========== Botones   ===================
+  pinMode(botonPin, INPUT_PULLUP);
+  // attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonIsr, FALLING);
+
 
    // Configurar cliente seguro para Telegram
   httpsClient.setInsecure(); // Evita problemas con certificados HTTPS(SSL)
@@ -99,10 +113,32 @@ void loop() {
       Comando cmd = parsearComando(input);
       ejecutarComando(cmd);
     }
-    
-    // procesarComandoTCP(comando);
   }
+
+    // ======  Botones  ==============
+  //  Leer estado del botón con debounce50
+  int lecturaBoton = digitalRead(botonPin);
+  
+  if (lecturaBoton != ultimoEstadoBoton) {
+    ultimoTiempoDebounce = millis();
+  }
+  
+  if ((millis() - ultimoTiempoDebounce) > delayDebounce) {
+    if (lecturaBoton == LOW && !botonPresionado) {
+      botonPresionado = true;
+      // tomarYEnviarFoto();
+      Serial.println("Boton presionado!");
+    } else if (lecturaBoton == HIGH) {
+      botonPresionado = false;
+    }
+  }
+  
+  ultimoEstadoBoton = lecturaBoton;
+  delay(10);
 }
+
+
+
 
 // ================== FUNCIONES DE TELEGRAM ==================
 
