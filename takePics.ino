@@ -157,9 +157,7 @@ void loop() {
   delay(10);
 }
 
-
 // ================== FUNCIONES DE TELEGRAM ==================
-
 
 void handleNewMessages(int numNewMessages) {
   Serial.printf("📩 Mensajes nuevos: %d\n", numNewMessages);
